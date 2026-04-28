@@ -287,6 +287,23 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Reset data
+app.post('/api/reset-data', async (req, res) => {
+  try {
+    const initialData = {
+      users: [],
+      pendingUsers: [],
+      logs: [],
+      holidayRequests: [],
+      leaveApplications: []
+    };
+    await writeData(initialData);
+    res.json({ success: true, message: 'All data has been cleared.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to reset data' });
+  }
+});
 // Start server
 app.listen(PORT, async () => {
   await initDataFile();
