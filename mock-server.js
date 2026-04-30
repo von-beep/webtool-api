@@ -226,6 +226,20 @@ app.put('/api/holiday-requests/:id', async (req, res) => {
   }
 });
 
+// Delete holiday request
+app.delete('/api/holiday-requests/:id', async (req, res) => {
+  try {
+    const data = await readData();
+    data.holidayRequests = data.holidayRequests.filter(r => r.id !== req.params.id);
+    await writeData(data);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete holiday request' });
+  }
+});
+
+
 // Add leave application
 app.post('/api/leave-applications', async (req, res) => {
   try {

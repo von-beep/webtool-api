@@ -263,6 +263,20 @@ app.post('/api/holiday-requests', async (req, res) => {
   }
 });
 
+// Delete holiday request
+app.delete('/api/holiday-requests/:id', async (req, res) => {
+  try {
+    await db.execute('DELETE FROM holiday_requests WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete holiday request' });
+  }
+});
+
+
+
+
 // Update holiday request status
 app.put('/api/holiday-requests/:id', async (req, res) => {
   try {

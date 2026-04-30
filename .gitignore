@@ -1,1 +1,6 @@
-node_modules
+# Local data and environment variables
+data.json
+.env
+
+# Dependencies
+/node_modules
