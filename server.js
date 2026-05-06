@@ -205,6 +205,17 @@ app.post('/api/logs', async (req, res) => {
   }
 });
 
+// Delete log
+app.delete('/api/logs/:id', async (req, res) => {
+  try {
+    await db.execute('DELETE FROM logs WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to delete log:', error);
+    res.status(500).json({ error: 'Failed to delete log' });
+  }
+});
+
 // Add holiday request
 app.post('/api/holiday-requests', async (req, res) => {
   try {
