@@ -31,9 +31,22 @@ async function createTables(connection) {
       role ENUM('user', 'admin') DEFAULT 'user',
       status ENUM('active', 'disabled') DEFAULT 'active',
       leaveCredits INT DEFAULT 20,
+      must_change_password BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Add must_change_password column to users table if it doesn't exist
+  const [columns] = await connection.execute(`
+    SHOW COLUMNS FROM users LIKE 'must_change_password'
+  `);
+
+  if (columns.length === 0) {
+    console.log("Adding 'must_change_password' column to 'users' table...");
+    await connection.execute(`
+      ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE
+    `);
+  }
 
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS pending_users (
@@ -87,6 +100,20 @@ async function createTables(connection) {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  await connection.execute(`
+    CREATE TABLE IF NOT EXISTS password_reset_requests (
+      id VARCHAR(36) PRIMARY KEY,
+      userEmail VARCHAR(255) NOT NULL,
+      userName VARCHAR(255) NOT NULL,
+      status ENUM('pending', 'approved', 'denied') DEFAULT 'pending',
+      tempPassword VARCHAR(255),
+      timestamp VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX (userEmail)
+    )
+  `);
+
   console.log('Tables are ready.');
 }
 
@@ -171,6 +198,7 @@ async function migrate() {
     await insertData(connection, 'logs', data.logs, 'id');
     await insertData(connection, 'holiday_requests', data.holidayRequests, 'id');
     await insertData(connection, 'leave_applications', data.leaveApplications, 'id');
+    await insertData(connection, 'password_reset_requests', data.passwordResetRequests, 'id');
 
     connection.release();
 
@@ -196,4 +224,11 @@ async function migrate() {
 }
 
 // Run the migration
-migrate();
+if (require.main === module) {
+  migrate();
+}
+
+module.exports = {
+  createTables,
+  migrate
+};

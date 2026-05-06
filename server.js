@@ -3,6 +3,7 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -26,11 +27,16 @@ let db;
 
 // Initialize database
 async function initDatabase() {
+  // Dynamically import the createTables function from migrate.js
+  const { createTables } = await import('./migrate.js');
+
   try {
     db = await mysql.createPool(dbConfig);
     const connection = await db.getConnection(); // Test the connection
     console.log('Database connection pool created successfully.');
+    await createTables(connection); // Ensure tables exist
     connection.release();
+
   } catch (error) {
     console.error('FATAL: Database initialization failed:', error);
     process.exit(1); // Exit the process if DB connection fails
@@ -47,13 +53,15 @@ app.get('/api/data', async (req, res) => {
     const [logs] = await db.execute('SELECT * FROM logs ORDER BY created_at DESC');
     const [holidayRequests] = await db.execute('SELECT * FROM holiday_requests ORDER BY created_at DESC');
     const [leaveApplications] = await db.execute('SELECT * FROM leave_applications ORDER BY created_at DESC');
+    const [passwordResetRequests] = await db.execute('SELECT * FROM password_reset_requests ORDER BY created_at DESC');
 
     res.json({
       users,
       pendingUsers,
       logs,
       holidayRequests,
-      leaveApplications
+      leaveApplications,
+      passwordResetRequests
     });
   } catch (error) {
     console.error(error);
@@ -104,6 +112,10 @@ app.put('/api/users/:id/password', async (req, res) => {
     if (!password) {
       return res.status(400).json({ error: 'Password cannot be empty' });
     }
+    // When a user resets their own password, turn off the 'must_change_password' flag
+    await db.execute(
+      'UPDATE users SET must_change_password = FALSE WHERE id = ?', [req.params.id]
+    );
     await db.execute(
       'UPDATE users SET password = ? WHERE id = ?',
       [hashedPassword, req.params.id]
@@ -131,8 +143,8 @@ app.post('/api/approve-user', async (req, res) => {
 
     // Add to users
     await connection.execute(
-      'INSERT INTO users (id, email, password, fullName, role, status, leaveCredits) VALUES (?, ?, ?, ?, ?, ?, ?)', // Assuming pending_users also stores hashed password
-      [user.id, user.email, user.password, user.fullName, user.role, 'active', 20] // The password from pending_users should already be hashed
+      'INSERT INTO users (id, email, password, fullName, role, status, leaveCredits, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', // Assuming pending_users also stores hashed password
+      [user.id, user.email, user.password, user.fullName, user.role, 'active', 20, false] // The password from pending_users should already be hashed
     );
 
     // Remove from pending
@@ -350,6 +362,83 @@ app.put('/api/users/:id/leave-credits', async (req, res) => {
   }
 });
 
+// Password Reset Request
+app.post('/api/password-reset-requests', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'No user found with this email address.' });
+    }
+    const user = users[0];
+
+    // Check if there's already a pending request for this user
+    const [existingRequests] = await db.execute('SELECT * FROM password_reset_requests WHERE userEmail = ? AND status = "pending"', [email]);
+    if (existingRequests.length > 0) {
+      return res.status(409).json({ error: 'A password reset request for this account is already pending.' });
+    }
+
+    const id = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+
+    await db.execute(
+      'INSERT INTO password_reset_requests (id, userEmail, userName, timestamp) VALUES (?, ?, ?, ?)',
+      [id, user.email, user.fullName, timestamp]
+    );
+
+    res.json({ success: true, message: 'Password reset request submitted successfully.' });
+  } catch (error) {
+    console.error('Failed to submit password reset request:', error);
+    res.status(500).json({ error: 'Failed to submit password reset request.' });
+  }
+});
+
+// Update Password Reset Request Status (Approve/Deny)
+app.put('/api/password-reset-requests/:id', async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { status } = req.body;
+    const { id } = req.params;
+
+    const [requests] = await connection.execute('SELECT * FROM password_reset_requests WHERE id = ?', [id]);
+    if (requests.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Request not found.' });
+    }
+    const request = requests[0];
+
+    let tempPassword = null;
+    if (status === 'approved') {
+      // Generate a temporary password
+      tempPassword = Math.random().toString(36).slice(-8);
+      const saltRounds = 10;
+      const hashedPassword = await bcrypt.hash(tempPassword, saltRounds);
+
+      // Update user's password and set flag to force change on next login
+      await connection.execute(
+        'UPDATE users SET password = ?, must_change_password = TRUE WHERE email = ?',
+        [hashedPassword, request.userEmail]
+      );
+    }
+
+    // Update the request status and store the temp password if approved
+    await connection.execute(
+      'UPDATE password_reset_requests SET status = ?, tempPassword = ? WHERE id = ?',
+      [status, tempPassword, id]
+    );
+
+    await connection.commit();
+    res.json({ success: true, tempPassword }); // Return temp password to admin
+  } catch (error) {
+    await connection.rollback();
+    console.error('Failed to update password reset request:', error);
+    res.status(500).json({ error: 'Failed to update password reset request.' });
+  } finally {
+    connection.release();
+  }
+});
+
 // Authenticate user
 app.post('/api/auth/login', async (req, res) => {
   try {
@@ -369,6 +458,9 @@ app.post('/api/auth/login', async (req, res) => {
       if (!passwordMatch) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
+
+      // Ensure must_change_password is a boolean for the frontend
+      user.must_change_password = Boolean(user.must_change_password);
 
       res.json({ success: true, user: user });
     } else {
