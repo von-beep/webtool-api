@@ -4,6 +4,8 @@ const cors = require('cors');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const http = require('http');
+const { WebSocketServer } = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -11,6 +13,22 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// --- WebSocket Setup ---
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', ws => {
+  console.log('Client connected to WebSocket');
+  ws.on('close', () => console.log('Client disconnected'));
+});
+
+function broadcastDataChange() {
+  console.log('Broadcasting data change to all clients...');
+  wss.clients.forEach(client => {
+    if (client.readyState === client.OPEN) client.send(JSON.stringify({ type: 'data-changed' }));
+  });
+}
 
 // MySQL Connection
 const dbConfig = {
@@ -80,6 +98,7 @@ app.post('/api/users', async (req, res) => {
       'INSERT INTO users (id, email, password, fullName, role, status) VALUES (?, ?, ?, ?, ?, ?)',
       [id, email, hashedPassword, fullName, role, 'active']
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -95,6 +114,7 @@ app.put('/api/users/:id/status', async (req, res) => {
       'UPDATE users SET status = ? WHERE id = ?',
       [status, req.params.id]
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -120,6 +140,7 @@ app.put('/api/users/:id/password', async (req, res) => {
       'UPDATE users SET password = ? WHERE id = ?',
       [hashedPassword, req.params.id]
     );
+    broadcastDataChange();
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
     console.error(error);
@@ -151,6 +172,7 @@ app.post('/api/approve-user', async (req, res) => {
     await connection.execute('DELETE FROM pending_users WHERE id = ?', [userId]);
 
     await connection.commit();
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     await connection.rollback();
@@ -172,6 +194,7 @@ app.post('/api/pending-users', async (req, res) => {
       'INSERT INTO pending_users (id, email, password, fullName, role) VALUES (?, ?, ?, ?, ?)',
       [id, email, hashedPassword, fullName, role]
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -183,6 +206,7 @@ app.post('/api/pending-users', async (req, res) => {
 app.delete('/api/pending-users/:id', async (req, res) => {
   try {
     await db.execute('DELETE FROM pending_users WHERE id = ?', [req.params.id]);
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -198,6 +222,7 @@ app.post('/api/logs', async (req, res) => {
       'INSERT INTO logs (userEmail, userName, type, timestamp, image, location) VALUES (?, ?, ?, ?, ?, ?)',
       [userEmail, userName, type, timestamp, image, location]
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -209,6 +234,7 @@ app.post('/api/logs', async (req, res) => {
 app.delete('/api/logs/:id', async (req, res) => {
   try {
     await db.execute('DELETE FROM logs WHERE id = ?', [req.params.id]);
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to delete log:', error);
@@ -224,6 +250,7 @@ app.post('/api/holiday-requests', async (req, res) => {
       'INSERT INTO holiday_requests (id, userEmail, userName, holidayName, holidayDate, details, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [id, userEmail, userName, holidayName, holidayDate, details, status, timestamp]
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -235,6 +262,7 @@ app.post('/api/holiday-requests', async (req, res) => {
 app.delete('/api/holiday-requests/:id', async (req, res) => {
   try {
     await db.execute('DELETE FROM holiday_requests WHERE id = ?', [req.params.id]);
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -250,6 +278,7 @@ app.put('/api/holiday-requests/:id', async (req, res) => {
       'UPDATE holiday_requests SET status = ? WHERE id = ?',
       [status, req.params.id]
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to update holiday request:', error);
@@ -265,6 +294,7 @@ app.post('/api/leave-applications', async (req, res) => {
       'INSERT INTO leave_applications (id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp]
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to add leave application:', error);
@@ -311,6 +341,7 @@ app.put('/api/leave-applications/:id', async (req, res) => {
     );
 
     await connection.commit();
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     await connection.rollback();
@@ -348,6 +379,7 @@ app.delete('/api/leave-applications/:id', async (req, res) => {
     await connection.execute('DELETE FROM leave_applications WHERE id = ?', [id]);
 
     await connection.commit();
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     await connection.rollback();
@@ -366,6 +398,7 @@ app.put('/api/users/:id/leave-credits', async (req, res) => {
       'UPDATE users SET leaveCredits = ? WHERE id = ?',
       [credits, req.params.id]
     );
+    broadcastDataChange();
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -397,6 +430,7 @@ app.post('/api/password-reset-requests', async (req, res) => {
       [id, user.email, user.fullName, timestamp]
     );
 
+    broadcastDataChange();
     res.json({ success: true, message: 'Password reset request submitted successfully.' });
   } catch (error) {
     console.error('Failed to submit password reset request:', error);
@@ -440,6 +474,7 @@ app.put('/api/password-reset-requests/:id', async (req, res) => {
     );
 
     await connection.commit();
+    broadcastDataChange();
     res.json({ success: true, tempPassword }); // Return temp password to admin
   } catch (error) {
     await connection.rollback();
@@ -495,7 +530,7 @@ app.post('/api/auth/login', async (req, res) => {
 // Start server
 async function startServer() {
   await initDatabase();
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 }
