@@ -2,6 +2,7 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 require('dotenv').config();
+const bcrypt = require('bcrypt');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -13,8 +14,8 @@ app.use(express.json());
 // MySQL Connection
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
+  user: process.env.DB_USER || 'nexus',
+  password: process.env.DB_PASSWORD || '/yIf[/h0O*.Gmwf/',
   database: process.env.DB_NAME || 'nexus_portal',
   waitForConnections: true,
   connectionLimit: 10,
@@ -25,78 +26,11 @@ let db;
 
 // Initialize database
 async function initDatabase() {
-  console.log('Attempting to connect to database...');
   try {
     db = await mysql.createPool(dbConfig);
-    await db.getConnection(); // Test the connection
-    console.log('Database connection successful.');
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id VARCHAR(36) PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        fullName VARCHAR(255) NOT NULL,
-        role ENUM('user', 'admin') DEFAULT 'user',
-        status ENUM('active', 'disabled') DEFAULT 'active',
-        leaveCredits INT DEFAULT 20,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS pending_users (
-        id VARCHAR(36) PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        fullName VARCHAR(255) NOT NULL,
-        role ENUM('user', 'admin') DEFAULT 'user',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS logs (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        userEmail VARCHAR(255) NOT NULL,
-        userName VARCHAR(255) NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        timestamp VARCHAR(255) NOT NULL,
-        image TEXT,
-        location TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS holiday_requests (
-        id VARCHAR(36) PRIMARY KEY,
-        userEmail VARCHAR(255) NOT NULL,
-        userName VARCHAR(255) NOT NULL,
-        holidayName VARCHAR(255) NOT NULL,
-        holidayDate DATE NOT NULL,
-        details TEXT,
-        status ENUM('pending', 'approved', 'denied') DEFAULT 'pending',
-        timestamp VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS leave_applications (
-        id VARCHAR(36) PRIMARY KEY,
-        userEmail VARCHAR(255) NOT NULL,
-        userName VARCHAR(255) NOT NULL,
-        leaveType VARCHAR(255) NOT NULL,
-        startDate DATE NOT NULL,
-        endDate DATE NOT NULL,
-        details TEXT,
-        status ENUM('pending', 'approved', 'denied') DEFAULT 'pending',
-        timestamp VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    console.log('Tables are ready.');
+    const connection = await db.getConnection(); // Test the connection
+    console.log('Database connection pool created successfully.');
+    connection.release();
   } catch (error) {
     console.error('FATAL: Database initialization failed:', error);
     process.exit(1); // Exit the process if DB connection fails
@@ -131,9 +65,12 @@ app.get('/api/data', async (req, res) => {
 app.post('/api/users', async (req, res) => {
   try {
     const { id, email, password, fullName, role } = req.body;
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
     await db.execute(
       'INSERT INTO users (id, email, password, fullName, role, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, email, password, fullName, role, 'active']
+      [id, email, hashedPassword, fullName, role, 'active']
     );
     res.json({ success: true });
   } catch (error) {
@@ -161,12 +98,15 @@ app.put('/api/users/:id/status', async (req, res) => {
 app.put('/api/users/:id/password', async (req, res) => {
   try {
     const { password } = req.body;
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
     if (!password) {
       return res.status(400).json({ error: 'Password cannot be empty' });
     }
     await db.execute(
       'UPDATE users SET password = ? WHERE id = ?',
-      [password, req.params.id]
+      [hashedPassword, req.params.id]
     );
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
@@ -191,8 +131,8 @@ app.post('/api/approve-user', async (req, res) => {
 
     // Add to users
     await connection.execute(
-      'INSERT INTO users (id, email, password, fullName, role, status, leaveCredits) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [user.id, user.email, user.password, user.fullName, user.role, 'active', 20]
+      'INSERT INTO users (id, email, password, fullName, role, status, leaveCredits) VALUES (?, ?, ?, ?, ?, ?, ?)', // Assuming pending_users also stores hashed password
+      [user.id, user.email, user.password, user.fullName, user.role, 'active', 20] // The password from pending_users should already be hashed
     );
 
     // Remove from pending
@@ -203,22 +143,27 @@ app.post('/api/approve-user', async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error(error);
+    res.status(500).json({ error: 'Failed to approve user' });
+  } finally {
+    connection.release();
+  }
+});
+
 // Add pending user
 app.post('/api/pending-users', async (req, res) => {
   try {
     const { id, email, password, fullName, role } = req.body;
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
     await db.execute(
       'INSERT INTO pending_users (id, email, password, fullName, role) VALUES (?, ?, ?, ?, ?)',
-      [id, email, password, fullName, role]
+      [id, email, hashedPassword, fullName, role]
     );
     res.json({ success: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to add pending user' });
-  }
-});
-  } finally {
-    connection.release();
   }
 });
 
@@ -275,9 +220,6 @@ app.delete('/api/holiday-requests/:id', async (req, res) => {
 });
 
 
-
-
-// Update holiday request status
 app.put('/api/holiday-requests/:id', async (req, res) => {
   try {
     const { status } = req.body;
@@ -287,8 +229,23 @@ app.put('/api/holiday-requests/:id', async (req, res) => {
     );
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
+    console.error('Failed to update holiday request:', error);
     res.status(500).json({ error: 'Failed to update holiday request' });
+  }
+});
+
+// Add leave application
+app.post('/api/leave-applications', async (req, res) => {
+  try {
+    const { id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp } = req.body;
+    await db.execute(
+      'INSERT INTO leave_applications (id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to add leave application:', error);
+    res.status(500).json({ error: 'Failed to add leave application' });
   }
 });
 
@@ -299,32 +256,30 @@ app.put('/api/leave-applications/:id', async (req, res) => {
     await connection.beginTransaction();
     const { status } = req.body;
     const { id } = req.params;
+    
+    // Get the current state of the application before updating
+    const [applications] = await connection.execute('SELECT * FROM leave_applications WHERE id = ?', [id]);
+    if (applications.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Leave application not found' });
+    }
+    const currentApplication = applications[0];
+    const previousStatus = currentApplication.status;
 
-    if (status === 'approved') {
-      const [applications] = await connection.execute('SELECT * FROM leave_applications WHERE id = ?', [id]);
-      if (applications.length === 0) {
-        await connection.rollback();
-        return res.status(404).json({ error: 'Leave application not found' });
-      }
-      const application = applications[0];
-
-      const [users] = await connection.execute('SELECT * FROM users WHERE email = ?', [application.userEmail]);
-      if (users.length === 0) {
-        await connection.rollback();
-        return res.status(404).json({ error: 'User not found' });
-      }
-      const user = users[0];
-
-      const startDate = new Date(application.startDate);
-      const endDate = new Date(application.endDate);
+    // Only perform credit logic if the status is actually changing
+    if (previousStatus !== status) {
+      const startDate = new Date(currentApplication.startDate);
+      const endDate = new Date(currentApplication.endDate);
       const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
-      if (user.leaveCredits < duration) {
-        await connection.rollback();
-        return res.status(400).json({ error: 'Insufficient leave credits' });
+      // Case 1: Moving TO approved (from pending/denied) -> Deduct credits
+      if (status === 'approved') {
+        await connection.execute('UPDATE users SET leaveCredits = leaveCredits - ? WHERE email = ?', [duration, currentApplication.userEmail]);
+      } 
+      // Case 2: Moving FROM approved (to pending/denied) -> Refund credits
+      else if (previousStatus === 'approved') {
+        await connection.execute('UPDATE users SET leaveCredits = leaveCredits + ? WHERE email = ?', [duration, currentApplication.userEmail]);
       }
-
-      await connection.execute('UPDATE users SET leaveCredits = leaveCredits - ? WHERE id = ?', [duration, user.id]);
     }
 
     await connection.execute(
@@ -338,6 +293,43 @@ app.put('/api/leave-applications/:id', async (req, res) => {
     await connection.rollback();
     console.error('Failed to update leave application:', error);
     res.status(500).json({ error: 'Failed to update leave application' });
+  } finally {
+    connection.release();
+  }
+});
+
+// Delete leave application
+app.delete('/api/leave-applications/:id', async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { id } = req.params;
+
+    // Get the application to check its status and user email before deleting
+    const [applications] = await connection.execute('SELECT * FROM leave_applications WHERE id = ?', [id]);
+    if (applications.length === 0) {
+      await connection.rollback();
+      // It's not an error if it's already gone, so we can just succeed.
+      return res.json({ success: true, message: 'Application not found, but considering it deleted.' });
+    }
+    const applicationToDelete = applications[0];
+
+    // If the application was approved, refund the leave credits
+    if (applicationToDelete.status === 'approved') {
+      const startDate = new Date(applicationToDelete.startDate);
+      const endDate = new Date(applicationToDelete.endDate);
+      const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      await connection.execute('UPDATE users SET leaveCredits = leaveCredits + ? WHERE email = ?', [duration, applicationToDelete.userEmail]);
+    }
+
+    await connection.execute('DELETE FROM leave_applications WHERE id = ?', [id]);
+
+    await connection.commit();
+    res.json({ success: true });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Failed to delete leave application:', error);
+    res.status(500).json({ error: 'Failed to delete leave application' });
   } finally {
     connection.release();
   }
@@ -372,7 +364,12 @@ app.post('/api/auth/login', async (req, res) => {
       if (user.status === 'disabled') {
         return res.status(403).json({ error: 'Your account has been disabled.' });
       }
-      if (user.password !== password) return res.status(401).json({ error: 'Invalid credentials' });
+      
+      const passwordMatch = await bcrypt.compare(password, user.password);
+      if (!passwordMatch) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
       res.json({ success: true, user: user });
     } else {
       // Check pending users
