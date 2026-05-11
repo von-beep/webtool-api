@@ -89,17 +89,8 @@ function broadcastDataChange() {
 // Get all users
 app.get('/api/users', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    const [[{ total }]] = await db.execute('SELECT COUNT(*) as total FROM users');
-    const [users] = await db.execute('SELECT * FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?', [limit, offset]);
-
-    res.json({
-      data: users,
-      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
-    });
+    const [users] = await db.execute('SELECT * FROM users ORDER BY created_at DESC');
+    res.json(users);
   } catch (error) {
     console.error('Failed to fetch users:', error);
     res.status(500).json({ error: 'Failed to fetch users' });
@@ -109,17 +100,8 @@ app.get('/api/users', async (req, res) => {
 // Get all pending users
 app.get('/api/pending-users', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    const [[{ total }]] = await db.execute('SELECT COUNT(*) as total FROM pending_users');
-    const [pendingUsers] = await db.execute('SELECT * FROM pending_users ORDER BY created_at DESC LIMIT ? OFFSET ?', [limit, offset]);
-
-    res.json({
-      data: pendingUsers,
-      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
-    });
+    const [pendingUsers] = await db.execute('SELECT * FROM pending_users ORDER BY created_at DESC');
+    res.json(pendingUsers);
   } catch (error) {
     console.error('Failed to fetch pending users:', error);
     res.status(500).json({ error: 'Failed to fetch pending users' });
@@ -129,17 +111,8 @@ app.get('/api/pending-users', async (req, res) => {
 // Get all logs
 app.get('/api/logs', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    const [[{ total }]] = await db.execute('SELECT COUNT(*) as total FROM logs');
-    const [logs] = await db.execute('SELECT * FROM logs ORDER BY timestamp DESC LIMIT ? OFFSET ?', [limit, offset]);
-
-    res.json({
-      data: logs,
-      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
-    });
+    const [logs] = await db.execute('SELECT * FROM logs ORDER BY timestamp DESC');
+    res.json(logs);
   } catch (error) {
     console.error('Failed to fetch logs:', error);
     res.status(500).json({ error: 'Failed to fetch logs' });
@@ -149,17 +122,8 @@ app.get('/api/logs', async (req, res) => {
 // Get all holiday requests
 app.get('/api/holiday-requests', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    const [[{ total }]] = await db.execute('SELECT COUNT(*) as total FROM holiday_requests');
-    const [holidayRequests] = await db.execute('SELECT * FROM holiday_requests ORDER BY timestamp DESC LIMIT ? OFFSET ?', [limit, offset]);
-
-    res.json({
-      data: holidayRequests,
-      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
-    });
+    const [holidayRequests] = await db.execute('SELECT * FROM holiday_requests ORDER BY timestamp DESC');
+    res.json(holidayRequests);
   } catch (error) {
     console.error('Failed to fetch holiday requests:', error);
     res.status(500).json({ error: 'Failed to fetch holiday requests' });
@@ -169,17 +133,8 @@ app.get('/api/holiday-requests', async (req, res) => {
 // Get all leave applications
 app.get('/api/leave-applications', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    const [[{ total }]] = await db.execute('SELECT COUNT(*) as total FROM leave_applications');
-    const [leaveApplications] = await db.execute('SELECT * FROM leave_applications ORDER BY timestamp DESC LIMIT ? OFFSET ?', [limit, offset]);
-
-    res.json({
-      data: leaveApplications,
-      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
-    });
+    const [leaveApplications] = await db.execute('SELECT * FROM leave_applications ORDER BY timestamp DESC');
+    res.json(leaveApplications);
   } catch (error) {
     console.error('Failed to fetch leave applications:', error);
     res.status(500).json({ error: 'Failed to fetch leave applications' });
@@ -189,17 +144,8 @@ app.get('/api/leave-applications', async (req, res) => {
 // Get all password reset requests
 app.get('/api/password-reset-requests', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const offset = (page - 1) * limit;
-
-    const [[{ total }]] = await db.execute('SELECT COUNT(*) as total FROM password_reset_requests');
-    const [passwordResetRequests] = await db.execute('SELECT * FROM password_reset_requests ORDER BY timestamp DESC LIMIT ? OFFSET ?', [limit, offset]);
-
-    res.json({
-      data: passwordResetRequests,
-      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
-    });
+    const [passwordResetRequests] = await db.execute('SELECT * FROM password_reset_requests ORDER BY timestamp DESC');
+    res.json(passwordResetRequests);
   } catch (error) {
     console.error('Failed to fetch password reset requests:', error);
     res.status(500).json({ error: 'Failed to fetch password reset requests' });
