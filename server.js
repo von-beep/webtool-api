@@ -30,6 +30,7 @@ const dbConfig = {
 
 // --- CORS Configuration ---
 const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',') : [];
+console.log("von CORS_ALLOWED_ORIGINS:", allowedOrigins);
 
 const corsOptions = {
   origin: (origin, callback) => {
@@ -37,7 +38,8 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      // Log the blocked origin for easier debugging
+      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
       return callback(new Error(msg), false);
     }
     return callback(null, true);
