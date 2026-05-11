@@ -21,31 +21,33 @@ const wss = new WebSocketServer({ server });
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'nexus',
-  password: process.env.DB_PASSWORD || '/yIf[/h0O*.Gmwf/',
+  password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME || 'nexus_portal',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
 };
 
-const allowedOrigins = [
-  'http://localhost:3000', // Frontend development
-  'https://grey-kangaroo-367428.hostingersite.com' // Deployed frontend
-];
+// --- CORS Configuration ---
+const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',') : [];
 
-app.use(cors({
-  origin: function (origin, callback) {
+const corsOptions = {
+  origin: (origin, callback) => {
     // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
+
     if (allowedOrigins.indexOf(origin) === -1) {
       const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
       return callback(new Error(msg), false);
     }
     return callback(null, true);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+  credentials: true, // Allow cookies and authorization headers
+};
+
+app.use(cors(corsOptions));
+// Handle pre-flight requests for all routes
+app.options('*', cors(corsOptions));
 
 
 let db;
@@ -592,7 +594,13 @@ app.post('/api/auth/login', async (req, res) => {
 async function startServer() {
   await initDatabase();
   server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}.`);
+    if (allowedOrigins.length > 0) {
+      console.log('CORS is enabled for the following origins:');
+      allowedOrigins.forEach(origin => console.log(`- ${origin}`));
+    } else {
+      console.warn('Warning: CORS_ALLOWED_ORIGINS is not set in .env file. API may be unreachable from the frontend.');
+    }
   });
 }
 

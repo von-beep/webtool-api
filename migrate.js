@@ -8,7 +8,7 @@ require('dotenv').config();
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'nexus',
-  password: process.env.DB_PASSWORD || '/yIf[/h0O*.Gmwf/',
+  password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME || 'nexus_portal',
   waitForConnections: true,
   connectionLimit: 10,
