@@ -11,24 +11,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
 app.use(express.json());
 
 // --- WebSocket Setup ---
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-
-wss.on('connection', ws => {
-  console.log('Client connected to WebSocket');
-  ws.on('close', () => console.log('Client disconnected'));
-});
-
-function broadcastDataChange() {
-  console.log('Broadcasting data change to all clients...');
-  wss.clients.forEach(client => {
-    if (client.readyState === client.OPEN) client.send(JSON.stringify({ type: 'data-changed' }));
-  });
-}
 
 // MySQL Connection
 const dbConfig = {
@@ -40,6 +27,26 @@ const dbConfig = {
   connectionLimit: 10,
   queueLimit: 0
 };
+
+const allowedOrigins = [
+  'http://localhost:3000', // Frontend development
+  'https://grey-kangaroo-367428.hostingersite.com' // Deployed frontend
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 
 let db;
 
@@ -61,29 +68,83 @@ async function initDatabase() {
   }
 }
 
+wss.on('connection', ws => {
+  console.log('Client connected to WebSocket');
+  ws.on('close', () => console.log('Client disconnected'));
+});
+
+function broadcastDataChange() {
+  console.log('Broadcasting data change to all clients...');
+  wss.clients.forEach(client => {
+    if (client.readyState === client.OPEN) client.send(JSON.stringify({ type: 'data-changed' }));
+  });
+}
+
 // API Routes
 
-// Get all data
-app.get('/api/data', async (req, res) => {
+// Get all users
+app.get('/api/users', async (req, res) => {
   try {
     const [users] = await db.execute('SELECT * FROM users ORDER BY created_at DESC');
-    const [pendingUsers] = await db.execute('SELECT * FROM pending_users ORDER BY created_at DESC');
-    const [logs] = await db.execute('SELECT * FROM logs ORDER BY created_at DESC');
-    const [holidayRequests] = await db.execute('SELECT * FROM holiday_requests ORDER BY created_at DESC');
-    const [leaveApplications] = await db.execute('SELECT * FROM leave_applications ORDER BY created_at DESC');
-    const [passwordResetRequests] = await db.execute('SELECT * FROM password_reset_requests ORDER BY created_at DESC');
-
-    res.json({
-      users,
-      pendingUsers,
-      logs,
-      holidayRequests,
-      leaveApplications,
-      passwordResetRequests
-    });
+    res.json(users);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to fetch data' });
+    console.error('Failed to fetch users:', error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// Get all pending users
+app.get('/api/pending-users', async (req, res) => {
+  try {
+    const [pendingUsers] = await db.execute('SELECT * FROM pending_users ORDER BY created_at DESC');
+    res.json(pendingUsers);
+  } catch (error) {
+    console.error('Failed to fetch pending users:', error);
+    res.status(500).json({ error: 'Failed to fetch pending users' });
+  }
+});
+
+// Get all logs
+app.get('/api/logs', async (req, res) => {
+  try {
+    const [logs] = await db.execute('SELECT * FROM logs ORDER BY timestamp DESC');
+    res.json(logs);
+  } catch (error) {
+    console.error('Failed to fetch logs:', error);
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+// Get all holiday requests
+app.get('/api/holiday-requests', async (req, res) => {
+  try {
+    const [holidayRequests] = await db.execute('SELECT * FROM holiday_requests ORDER BY timestamp DESC');
+    res.json(holidayRequests);
+  } catch (error) {
+    console.error('Failed to fetch holiday requests:', error);
+    res.status(500).json({ error: 'Failed to fetch holiday requests' });
+  }
+});
+
+// Get all leave applications
+app.get('/api/leave-applications', async (req, res) => {
+  try {
+    const [leaveApplications] = await db.execute('SELECT * FROM leave_applications ORDER BY timestamp DESC');
+    res.json(leaveApplications);
+  } catch (error) {
+    console.error('Failed to fetch leave applications:', error);
+    res.status(500).json({ error: 'Failed to fetch leave applications' });
+  }
+});
+
+// Get all password reset requests
+app.get('/api/password-reset-requests', async (req, res) => {
+  try {
+    const [passwordResetRequests] = await db.execute('SELECT * FROM password_reset_requests ORDER BY timestamp DESC');
+    res.json(passwordResetRequests);
+  } catch (error) {
+    console.error('Failed to fetch password reset requests:', error);
+    res.status(500).json({ error: 'Failed to fetch password reset requests' });
   }
 });
 
