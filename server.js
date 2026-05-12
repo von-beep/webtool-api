@@ -72,9 +72,32 @@ async function initDatabase() {
   }
 }
 
+const heartbeatInterval = 30000; // 30 seconds
+
 wss.on('connection', ws => {
   console.log('Client connected to WebSocket');
-  ws.on('close', () => console.log('Client disconnected'));
+  ws.isAlive = true;
+
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+const interval = setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (ws.isAlive === false) return ws.terminate();
+
+    ws.isAlive = false;
+    ws.ping();
+  });
+});
+
+wss.on('close', () => {
+  clearInterval(interval);
 });
 
 function broadcastDataChange() {
