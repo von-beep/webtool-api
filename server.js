@@ -249,6 +249,14 @@ app.post('/api/approve-user', async (req, res) => {
     }
     const user = users[0];
 
+    // Check if email already exists in the main users table
+    const [existingUsers] = await connection.execute('SELECT id FROM users WHERE email = ?', [user.email]);
+    if (existingUsers.length > 0) {
+      await connection.rollback();
+      // Send a 409 Conflict status code
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
 
     // Add to users
     await connection.execute(
@@ -277,6 +285,18 @@ app.post('/api/pending-users', async (req, res) => {
     const { id, email, password, fullName, role } = req.body;
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Check if email already exists in either users or pending_users table
+    const [existingUsers] = await db.execute('SELECT email FROM users WHERE email = ?', [email]);
+    const [existingPendingUsers] = await db.execute('SELECT email FROM pending_users WHERE email = ?', [email]);
+
+    if (existingUsers.length > 0 || existingPendingUsers.length > 0) {
+      // Send a 409 Conflict status code
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    // The frontend API call for addPendingUser needs to be updated to handle this error.
+    // I will make that change in another step if you'd like.
 
     await db.execute(
       'INSERT INTO pending_users (id, email, password, fullName, role) VALUES (?, ?, ?, ?, ?)',
