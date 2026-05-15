@@ -131,10 +131,37 @@ app.get('/api/pending-users', async (req, res) => {
   }
 });
 
-// Get all logs
+// Get logs with optional pagination
 app.get('/api/logs', async (req, res) => {
   try {
-    const [logs] = await db.execute('SELECT * FROM logs ORDER BY timestamp DESC');
+    let page = req.query.page ? parseInt(req.query.page, 10) : null;
+    let limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
+
+    const hasPagination = page != null || limit != null;
+    if (hasPagination) {
+      page = Math.max(page || 1, 1);
+      limit = Math.max(limit || 50, 1);
+      const offset = (page - 1) * limit;
+
+      const [[countResult]] = await db.execute('SELECT COUNT(*) AS totalCount FROM logs');
+      const totalCount = countResult.totalCount || 0;
+      const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
+
+      const [logs] = await db.execute(
+        'SELECT * FROM logs ORDER BY timestamp DESC LIMIT ? OFFSET ?',
+        [limit, offset]
+      );
+
+      return res.json({
+        logs,
+        currentPage: page,
+        totalPages,
+        totalCount,
+        pageSize: limit,
+      });
+    }
+
+    const [logs] = await db.execute('SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50');
     res.json(logs);
   } catch (error) {
     console.error('Failed to fetch logs:', error);
