@@ -1,8 +1,11 @@
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const http = require('http');
 const { WebSocketServer } = require('ws');
@@ -11,7 +14,24 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+app.use(cors());
 app.use(express.json());
+
+// Authentication middleware
+const authenticateUser = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  const token = authHeader.substring(7);
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 // --- WebSocket Setup ---
 const server = http.createServer(app);
@@ -136,6 +156,25 @@ app.get('/api/logs', async (req, res) => {
   try {
     let page = req.query.page ? parseInt(req.query.page, 10) : null;
     let limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
+    const date = req.query.date; // New: date filter
+
+    let baseQuery = 'SELECT * FROM logs';
+    let countQuery = 'SELECT COUNT(*) AS totalCount FROM logs';
+    const whereClauses = [];
+    const queryParams = [];
+
+    if (date) {
+      // Assumes timestamp is stored as an ISO string (e.g., "2024-05-15T...").
+      // The 'LIKE' operator efficiently filters records for that specific day.
+      whereClauses.push('timestamp LIKE ?');
+      queryParams.push(`${date}%`);
+    }
+
+    if (whereClauses.length > 0) {
+      const whereString = ` WHERE ${whereClauses.join(' AND ')}`;
+      baseQuery += whereString;
+      countQuery += whereString;
+    }
 
     const hasPagination = page != null || limit != null;
     if (hasPagination) {
@@ -143,25 +182,20 @@ app.get('/api/logs', async (req, res) => {
       limit = Math.max(limit || 50, 1);
       const offset = (page - 1) * limit;
 
-      const [[countResult]] = await db.execute('SELECT COUNT(*) AS totalCount FROM logs');
+      const [[countResult]] = await db.execute(countQuery, queryParams);
       const totalCount = countResult.totalCount || 0;
       const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
 
-      const [logs] = await db.execute(
-        'SELECT * FROM logs ORDER BY timestamp DESC LIMIT ? OFFSET ?',
-        [limit, offset]
-      );
+      const finalQuery = `${baseQuery} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
+      const [logs] = await db.execute(finalQuery, [...queryParams, limit, offset]);
 
-      return res.json({
-        logs,
-        currentPage: page,
-        totalPages,
-        totalCount,
-        pageSize: limit,
-      });
+      return res.json({ logs, currentPage: page, totalPages, totalCount, pageSize: limit });
     }
 
-    const [logs] = await db.execute('SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50');
+    // Fallback for requests without pagination (e.g., initial dashboard load)
+    const finalQuery = `${baseQuery} ORDER BY timestamp DESC LIMIT 50`;
+    const [logs] = await db.execute(finalQuery, queryParams);
+
     res.json(logs);
   } catch (error) {
     console.error('Failed to fetch logs:', error);
@@ -640,10 +674,13 @@ app.post('/api/auth/login', async (req, res) => {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
+      // Generate JWT token
+      const token = jwt.sign({ email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+
       // Ensure must_change_password is a boolean for the frontend
       user.must_change_password = Boolean(user.must_change_password);
 
-      res.json({ success: true, user: user });
+      res.json({ success: true, user: user, token: token });
     } else {
       // Check pending users
       const [pending] = await db.execute(
