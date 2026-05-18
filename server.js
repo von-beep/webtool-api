@@ -200,15 +200,31 @@ app.get('/api/logs', async (req, res) => {
 
       const finalQuery = `${baseQuery} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
       const [logs] = await db.execute(finalQuery, [...queryParams, limit, offset]);
+      const normalizedLogs = logs.map((log) => ({
+        ...log,
+        created_at: log.created_at instanceof Date
+          ? log.created_at.toISOString().split('T')[0]
+          : typeof log.created_at === 'string'
+            ? log.created_at.split('T')[0]
+            : log.created_at,
+      }));
 
-      return res.json({ logs, currentPage: page, totalPages, totalCount, pageSize: limit });
+      return res.json({ logs: normalizedLogs, currentPage: page, totalPages, totalCount, pageSize: limit });
     }
 
     // Fallback for requests without pagination (e.g., initial dashboard load)
     const finalQuery = `${baseQuery} ORDER BY created_at DESC LIMIT 50`;
     const [logs] = await db.execute(finalQuery, queryParams);
+    const normalizedLogs = logs.map((log) => ({
+      ...log,
+      created_at: log.created_at instanceof Date
+        ? log.created_at.toISOString().split('T')[0]
+        : typeof log.created_at === 'string'
+          ? log.created_at.split('T')[0]
+          : log.created_at,
+    }));
 
-    res.json(logs);
+    res.json(normalizedLogs);
   } catch (error) {
     console.error('Failed to fetch logs:', error);
     res.status(500).json({ error: 'Failed to fetch logs' });
