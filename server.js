@@ -416,7 +416,7 @@ app.post('/api/logs', async (req, res) => {
   try {
     const { userEmail, userName, type, timestamp, image, location } = req.body;
     await db.execute(
-      'INSERT INTO logs (userEmail, userName, type, timestamp, image, location) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO logs (userEmail, userName, type, timestamp, image, location, created_at) VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())',
       [userEmail, userName, type, timestamp, image, location]
     );
     broadcastDataChange();
