@@ -165,10 +165,18 @@ app.get('/api/logs', async (req, res) => {
     const queryParams = [];
 
     if (date) {
-      // Assumes timestamp is stored as an ISO string (e.g., "2024-05-15T...").
-      // The 'LIKE' operator efficiently filters records for that specific day.
-      whereClauses.push('timestamp LIKE ?');
-      queryParams.push(`${date}%`);
+      const parsedDate = new Date(date);
+      if (!isNaN(parsedDate.getTime())) {
+        const dateOnly = parsedDate.toISOString().split('T')[0];
+        const startOfDay = new Date(`${dateOnly}T00:00:00.000Z`);
+        const endOfDay = new Date(startOfDay);
+        endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
+
+        whereClauses.push('created_at >= ? AND created_at < ?');
+        queryParams.push(startOfDay.toISOString(), endOfDay.toISOString());
+      } else {
+        console.warn(`Invalid date filter received: ${date}`);
+      }
     }
 
     if (userEmail) {
