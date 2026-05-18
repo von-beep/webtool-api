@@ -157,6 +157,7 @@ app.get('/api/logs', async (req, res) => {
     let page = req.query.page ? parseInt(req.query.page, 10) : null;
     let limit = req.query.limit ? parseInt(req.query.limit, 10) : null;
     const date = req.query.date; // New: date filter
+    const userEmail = req.query.userEmail;
 
     let baseQuery = 'SELECT * FROM logs';
     let countQuery = 'SELECT COUNT(*) AS totalCount FROM logs';
@@ -168,6 +169,11 @@ app.get('/api/logs', async (req, res) => {
       // The 'LIKE' operator efficiently filters records for that specific day.
       whereClauses.push('timestamp LIKE ?');
       queryParams.push(`${date}%`);
+    }
+
+    if (userEmail) {
+      whereClauses.push('userEmail = ?');
+      queryParams.push(userEmail);
     }
 
     if (whereClauses.length > 0) {
