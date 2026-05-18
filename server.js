@@ -202,14 +202,14 @@ app.get('/api/logs', async (req, res) => {
       const totalCount = countResult.totalCount || 0;
       const totalPages = Math.max(Math.ceil(totalCount / limit), 1);
 
-      const finalQuery = `${baseQuery} ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
+      const finalQuery = `${baseQuery} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
       const [logs] = await db.execute(finalQuery, [...queryParams, limit, offset]);
 
       return res.json({ logs, currentPage: page, totalPages, totalCount, pageSize: limit });
     }
 
     // Fallback for requests without pagination (e.g., initial dashboard load)
-    const finalQuery = `${baseQuery} ORDER BY timestamp DESC LIMIT 50`;
+    const finalQuery = `${baseQuery} ORDER BY created_at DESC LIMIT 50`;
     const [logs] = await db.execute(finalQuery, queryParams);
 
     res.json(logs);
