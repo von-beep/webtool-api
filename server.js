@@ -414,10 +414,10 @@ app.delete('/api/pending-users/:id', async (req, res) => {
 // Add log
 app.post('/api/logs', async (req, res) => {
   try {
-    const { userEmail, userName, type, timestamp, image, location } = req.body;
+    const { userEmail, userName, type, timestamp, image, location, created_at } = req.body;
     await db.execute(
-      'INSERT INTO logs (userEmail, userName, type, timestamp, image, location, created_at) VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())',
-      [userEmail, userName, type, timestamp, image, location]
+      'INSERT INTO logs (userEmail, userName, type, timestamp, image, location, created_at) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, UTC_TIMESTAMP()))',
+      [userEmail, userName, type, timestamp, image, location, created_at || null]
     );
     broadcastDataChange();
     res.json({ success: true });
