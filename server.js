@@ -49,7 +49,9 @@ const dbConfig = {
 };
 
 // --- CORS Configuration ---
-const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',') : [];
+const envOrigins = process.env.CORS_ALLOWED_ORIGINS ? process.env.CORS_ALLOWED_ORIGINS.split(',').map(o => o.trim()) : [];
+const defaultLocalOrigins = ['http://localhost:3000', 'http://127.0.0.1:3000'];
+const allowedOrigins = [...new Set([...envOrigins, ...defaultLocalOrigins])]; // Combine and deduplicate
 console.log("von CORS_ALLOWED_ORIGINS:", allowedOrigins);
 
 const corsOptions = {
