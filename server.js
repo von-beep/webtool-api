@@ -170,12 +170,8 @@ app.get('/api/logs', async (req, res) => {
       const parsedDate = new Date(date);
       if (!isNaN(parsedDate.getTime())) {
         const dateOnly = parsedDate.toISOString().split('T')[0];
-        const startOfDay = new Date(`${dateOnly}T00:00:00.000Z`);
-        const endOfDay = new Date(startOfDay);
-        endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
-
-        whereClauses.push('created_at >= ? AND created_at < ?');
-        queryParams.push(startOfDay.toISOString(), endOfDay.toISOString());
+        whereClauses.push('DATE(created_at) = ?');
+        queryParams.push(dateOnly);
       } else {
         console.warn(`Invalid date filter received: ${date}`);
       }
