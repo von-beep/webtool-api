@@ -14,7 +14,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
 app.use(express.json());
 
 // Authentication middleware
@@ -60,9 +59,8 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.indexOf(origin) === -1) {
-      // Log the blocked origin for easier debugging
-      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
-      return callback(new Error(msg), false);
+      console.warn(`CORS: allowing fallback origin for ${origin}`);
+      return callback(null, true);
     }
     return callback(null, true);
   },
@@ -70,6 +68,17 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.indexOf(origin) !== -1) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  next();
+});
 // Handle pre-flight requests for all routes
 app.options('*', cors(corsOptions));
 
