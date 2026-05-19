@@ -30,18 +30,28 @@ async function createTables(connection) {
       fullName VARCHAR(255) NOT NULL,
       role ENUM('user', 'admin') DEFAULT 'user',
       status ENUM('active', 'disabled') DEFAULT 'active',
-      leaveCredits INT DEFAULT 20,
+      leaveCredits DECIMAL(5, 1) DEFAULT 20.0,
       must_change_password BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
   // Add must_change_password column to users table if it doesn't exist
-  const [columns] = await connection.execute(`
+  const [passwordColumns] = await connection.execute(`
     SHOW COLUMNS FROM users LIKE 'must_change_password'
   `);
 
-  if (columns.length === 0) {
+  // Check and alter the leaveCredits column if it's still an INT
+  const [leaveCreditColumns] = await connection.execute(`
+    SHOW COLUMNS FROM users LIKE 'leaveCredits'
+  `);
+
+  if (leaveCreditColumns.length > 0 && leaveCreditColumns[0].Type.startsWith('int')) {
+    console.log("Altering 'leaveCredits' column to DECIMAL(5, 1)...");
+    await connection.execute(`ALTER TABLE users MODIFY COLUMN leaveCredits DECIMAL(5, 1) DEFAULT 20.0`);
+  }
+
+  if (passwordColumns.length === 0) {
     console.log("Adding 'must_change_password' column to 'users' table...");
     await connection.execute(`
       ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE
@@ -94,12 +104,40 @@ async function createTables(connection) {
       leaveType VARCHAR(255) NOT NULL,
       startDate DATE NOT NULL,
       endDate DATE NOT NULL,
+      dayType ENUM('whole', 'half') DEFAULT 'whole',
+      halfDayShift ENUM('morning', 'afternoon'),
+      payType ENUM('withPay', 'withoutPay') DEFAULT 'withPay',
       details TEXT,
       status ENUM('pending', 'approved', 'denied') DEFAULT 'pending',
       timestamp VARCHAR(255) NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  // Add dayType and payType to leave_applications if they don't exist
+  const [leaveAppColumns] = await connection.execute(`SHOW COLUMNS FROM leave_applications`);
+  const leaveAppColumnNames = leaveAppColumns.map(c => c.Field);
+
+  if (!leaveAppColumnNames.includes('dayType')) {
+    console.log("Adding 'dayType' column to 'leave_applications' table...");
+    await connection.execute(`
+      ALTER TABLE leave_applications ADD COLUMN dayType ENUM('whole', 'half') DEFAULT 'whole' AFTER endDate
+    `);
+  }
+
+  if (!leaveAppColumnNames.includes('payType')) {
+    console.log("Adding 'payType' column to 'leave_applications' table...");
+    await connection.execute(`
+      ALTER TABLE leave_applications ADD COLUMN payType ENUM('withPay', 'withoutPay') DEFAULT 'withPay' AFTER dayType
+    `);
+  }
+
+  if (!leaveAppColumnNames.includes('halfDayShift')) {
+    console.log("Adding 'halfDayShift' column to 'leave_applications' table...");
+    await connection.execute(`
+      ALTER TABLE leave_applications ADD COLUMN halfDayShift ENUM('morning', 'afternoon') DEFAULT NULL AFTER dayType
+    `);
+  }
 
   await connection.execute(`
     CREATE TABLE IF NOT EXISTS password_reset_requests (

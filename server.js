@@ -495,10 +495,11 @@ app.put('/api/holiday-requests/:id', async (req, res) => {
 // Add leave application
 app.post('/api/leave-applications', async (req, res) => {
   try {
-    const { id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp } = req.body;
+    const { id, userEmail, userName, leaveType, startDate, details, status, timestamp, dayType, payType, halfDayShift } = req.body;
+    const endDate = req.body.endDate || startDate; // Use startDate if endDate is not provided
     await db.execute(
-      'INSERT INTO leave_applications (id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp]
+      'INSERT INTO leave_applications (id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp, dayType, payType, halfDayShift) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, userEmail, userName, leaveType, startDate, endDate, details, status, timestamp, dayType, payType, dayType === 'half' ? halfDayShift : null]
     );
     broadcastDataChange();
     res.json({ success: true });
@@ -529,10 +530,17 @@ app.put('/api/leave-applications/:id', async (req, res) => {
     if (previousStatus !== status) {
       const startDate = new Date(currentApplication.startDate);
       const endDate = new Date(currentApplication.endDate);
-      const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      let duration;
 
+      // Adjust duration for half-day leaves
+      if (currentApplication.dayType === 'half') {
+        duration = 0.5;
+      } else {
+        duration = (endDate - startDate) / (1000 * 60 * 60 * 24) + 1;
+      }
       // Case 1: Moving TO approved (from pending/denied) -> Deduct credits
-      if (status === 'approved') {
+      // Only deduct if it's a paid leave
+      if (status === 'approved' && currentApplication.payType === 'withPay') {
         await connection.execute('UPDATE users SET leaveCredits = leaveCredits - ? WHERE email = ?', [duration, currentApplication.userEmail]);
       } 
       // Case 2: Moving FROM approved (to pending/denied) -> Refund credits
@@ -578,7 +586,7 @@ app.delete('/api/leave-applications/:id', async (req, res) => {
     if (applicationToDelete.status === 'approved') {
       const startDate = new Date(applicationToDelete.startDate);
       const endDate = new Date(applicationToDelete.endDate);
-      const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      const duration = applicationToDelete.dayType === 'half' ? 0.5 : (endDate - startDate) / (1000 * 60 * 60 * 24) + 1;
       await connection.execute('UPDATE users SET leaveCredits = leaveCredits + ? WHERE email = ?', [duration, applicationToDelete.userEmail]);
     }
 
