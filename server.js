@@ -36,6 +36,11 @@ const authenticateUser = (req, res, next) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Handle WebSocket server errors gracefully to prevent uncaught exceptions
+wss.on('error', (err) => {
+  console.error('WebSocketServer error:', err);
+});
+
 // MySQL Connection
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
@@ -55,30 +60,20 @@ console.log("von CORS_ALLOWED_ORIGINS:", allowedOrigins);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.indexOf(origin) === -1) {
-      console.warn(`CORS: allowing fallback origin for ${origin}`);
-      return callback(null, true);
+    // Allow requests with no origin (like mobile apps or curl requests)
+    // and requests from our whitelisted origins.
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
     }
-    return callback(null, true);
   },
   credentials: true, // Allow cookies and authorization headers
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  optionsSuccessStatus: 204 // For legacy browser support
 };
 
 app.use(cors(corsOptions));
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.indexOf(origin) !== -1) {
-    res.header('Access-Control-Allow-Origin', origin);
-  } else {
-    res.header('Access-Control-Allow-Origin', '*');
-  }
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  next();
-});
 // Handle pre-flight requests for all routes
 app.options('*', cors(corsOptions));
 
@@ -747,6 +742,17 @@ app.post('/api/auth/login', async (req, res) => {
 // Start server
 async function startServer() {
   await initDatabase();
+  // Handle listen errors such as EADDRINUSE with a helpful message
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use. Another process is listening.`);
+      console.error(`Run: netstat -ano | findstr :${PORT}  and then taskkill /PID <pid> /F to free the port, or set PORT env var.`);
+      process.exit(1);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}.`);
     if (allowedOrigins.length > 0) {
